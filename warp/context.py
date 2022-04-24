@@ -107,6 +107,14 @@ def kernel(f):
 
     return k
 
+# decorator to register struct, @struct
+def struct(c):
+
+    m = get_module(c.__module__)
+    s = warp.codegen.Struct(cls=c, key=c.__name__, module=m)
+
+    return s
+
 
 builtin_functions = {}
 
@@ -156,6 +164,7 @@ class Module:
     def __init__(self, name):
 
         self.name = name
+        self.structs = {}
         self.kernels = {}
         self.functions = {}
 
@@ -167,6 +176,9 @@ class Module:
 
         self.options = {"max_unroll": 16,
                         "mode": warp.config.mode}
+
+    def register_struct(self, struct):
+        self.structs[struct.key] = struct
 
     def register_kernel(self, kernel):
 
@@ -290,6 +302,14 @@ class Module:
             # kernels
             entry_points = []
 
+            # structs
+            for name, struct in self.structs.items():
+                struct_source = warp.codegen.codegen_struct(struct)
+                if (enable_cpu):
+                    cpp_source += struct_source
+                if (enable_cuda):
+                    cu_source += struct_source
+
             # functions
             for name, func in self.functions.items():
             
@@ -347,7 +367,7 @@ class Module:
                 cu_file = open(cu_path, "w")
                 cu_file.write(cu_source)
                 cu_file.close()
-        
+
             try:
                 
                 if (enable_cpu):
@@ -790,6 +810,10 @@ def launch(kernel, dim: int, inputs:List, outputs:List=[], adj_inputs:List=[], a
                             params.append(ctypes.c_int64(0))
                         else:
                             params.append(ctypes.c_int64(a.ptr))
+
+                elif (isinstance(arg_type, wp.codegen.Struct)):
+                    assert a is not None
+                    params.append(a._c_struct_)
 
                 # try to convert to a value type (vec3, mat33, etc)
                 elif issubclass(arg_type, ctypes.Array):

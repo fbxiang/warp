@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Copyright (c) 2022 NVIDIA CORPORATION.  All rights reserved.
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -27,6 +29,7 @@ from typing import Any
 from warp.types import *
 import warp.config
 
+
 # map operator to function name
 builtin_operators = {}
 
@@ -50,6 +53,54 @@ builtin_operators[ast.LtE] = "<="
 builtin_operators[ast.Eq] = "=="
 builtin_operators[ast.NotEq] = "!="
 
+class StructInstance:
+    def __init__(self, struct):
+        self.__dict__['_struct_'] = struct
+        self.__dict__['_c_struct_'] = struct.ctype()
+
+    def __setattr__(self, name, value):
+        assert name in self._struct_.vars
+        if isinstance(self._struct_.vars[name], array):
+            assert isinstance(value, array)
+            assert value.dtype == self._struct_.vars[name].dtype
+            setattr(self._c_struct_, name, ctypes.c_void_p(value.ptr))
+        else:
+            setattr(self._c_struct_, name, self._struct_.vars[name]._type_(value))
+        self.__dict__[name] = value
+
+class Struct:
+
+    def __init__(self, cls, key, module):
+
+        self.cls = cls
+        self.module = module
+        self.key = key
+
+        self.vars = {}
+        for label, type in self.cls.__annotations__.items():
+            if type == float:
+                type = float32
+            elif type == int:
+                type = int32
+            self.vars[label] = type
+
+        fields = []
+        for label, type in self.vars.items():
+            if isinstance(type, array):
+                fields.append((label, ctypes.c_void_p))
+            else:
+                fields.append((label, type._type_))
+
+        class StructType(ctypes.Structure):
+            _fields_ = fields
+
+        self.ctype = StructType
+
+        if (module):
+            module.register_struct(self)
+
+    def __call__(self):
+        return StructInstance(self)
 
 class Var:
     def __init__(self, label, type, requires_grad=False, constant=None):
@@ -71,6 +122,8 @@ class Var:
     def ctype(self):
         if (isinstance(self.type, array)):
             return str(self.type.dtype.__name__) + "*"
+        if (isinstance(self.type, Struct)):
+            return self.type.cls.__name__
         else:
             return str(self.type.__name__)
 
@@ -199,10 +252,8 @@ class Adjoint:
         return output
 
     def add_call(adj, func, inputs):
-
         # if func is overloaded then perform overload resolution here, this is just to try and catch
         # argument errors before they go to generated native code
-
         if (isinstance(func, list)):
     
             resolved_func = None
@@ -315,7 +366,7 @@ class Adjoint:
     def begin_for(adj, iter, start, end, step):
 
         # note that dynamic for-loops must not mutate any previous state, so we don't need to re-run them in the reverse pass        
-        adj.add_forward(f"for (var_{iter}=var_{start}; cmp(var_{iter}, var_{end}, var_{step}); var_{iter} += var_{step}) {{""", statement_replay="if (false) {")
+        adj.add_forward(f"for (var_{iter}=var_{start}; cmp(var_{iter}, var_{end}, var_{step}); var_{iter} += var_{step}) {{", statement_replay="if (false) {")
         adj.add_reverse("}")
 
         adj.indent_count += 1
@@ -510,6 +561,11 @@ class Adjoint:
                 key = attribute_to_str(node)
 
                 if key in adj.symbols:
+                    return adj.symbols[key]
+                elif isinstance(node.value, ast.Name) and node.value.id in adj.symbols:
+                    # access struct attribute
+                    out = Var(key, adj.symbols[node.value.id].type.vars[node.attr])
+                    adj.symbols[key] = out
                     return adj.symbols[key]
                 else:
                     obj = attribute_to_val(node, adj.func.__globals__)
@@ -910,6 +966,14 @@ using namespace wp;
 
 '''
 
+struct_template = '''
+struct {name}
+{{
+{struct_body}
+}};
+
+'''
+
 cpu_function_template = '''
 static {return_type} {name}({forward_args})
 {{
@@ -1059,6 +1123,22 @@ def indent(args, stops=1):
 
     return sep + args.replace(", ", "," + sep)
 
+def codegen_struct(struct, indent=4):
+    body = []
+    indent_block = " " * indent
+    for label, type in struct.vars.items():
+        assert not (isinstance(type, Struct))
+        if (isinstance(type, array)):
+            ctype = str(type.dtype.__name__) + "*"
+        else:
+            ctype = str(type.__name__)
+
+        body.append(ctype + " " + label + ";\n")
+
+    return struct_template.format(
+        name=struct.cls.__name__,
+        struct_body="".join([indent_block + l for l in body])
+    )
 
 def codegen_func_forward_body(adj, device='cpu', indent=4):
     body = []
