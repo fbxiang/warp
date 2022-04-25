@@ -100,7 +100,11 @@ class Struct:
             module.register_struct(self)
 
     def __call__(self):
-        return StructInstance(self)
+        class NewStructInstance(self.cls, StructInstance):
+            def __init__(inst):
+                StructInstance.__init__(inst, self)
+
+        return NewStructInstance()
 
 class Var:
     def __init__(self, label, type, requires_grad=False, constant=None):
