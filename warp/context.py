@@ -207,6 +207,11 @@ class Module:
         
         h = hashlib.sha256()
 
+        # struct source
+        for struct in self.structs.values():
+            s = inspect.getsource(struct.cls)
+            h.update(bytes(s, 'utf-8'))
+
         # functions source
         for func in self.functions.values():
             s = func.adj.source
