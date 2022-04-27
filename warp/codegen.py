@@ -259,14 +259,14 @@ class Adjoint:
         # if func is overloaded then perform overload resolution here, this is just to try and catch
         # argument errors before they go to generated native code
         if (isinstance(func, list)):
-    
+
             resolved_func = None
 
             for f in func:
                 match = True
 
                 if (f.variadic == False):
-                  
+
                     # check argument counts match (todo: default arguments?)
                     if len(f.input_types) != len(inputs):
                         match = False
@@ -297,8 +297,9 @@ class Adjoint:
             else:
                 func = resolved_func
 
+        value_type = func.value_type(inputs)
         # expression (zero output), e.g.: void do_something();
-        if (func.value_type(inputs) == None):
+        if (value_type == None):
 
             forward_call = func.namespace + "{}({});".format(func.key, adj.format_args("var_", inputs))
             adj.add_forward(forward_call)
@@ -308,6 +309,21 @@ class Adjoint:
                 adj.add_reverse(reverse_call)
 
             return None
+
+        # function (multiple output, custom functions)
+        elif (isinstance(value_type, list)):
+            output = [adj.add_var(v) for v in value_type]
+            forward_call = func.namespace + "{}({});".format(func.key, adj.format_args("var_", inputs+output))
+            adj.add_forward(forward_call)
+
+            if (len(inputs)):
+                reverse_call = func.namespace + "{}({}, {}, {});".format(
+                    "adj_" + func.key, adj.format_args("var_", inputs+output), adj.format_args("adj_", inputs), adj.format_args("adj_", output))
+                adj.add_reverse(reverse_call)
+
+            if len(output) == 1:
+                return output[0]
+            return output
 
         # function (one output)
         else:
@@ -327,10 +343,15 @@ class Adjoint:
     def add_return(adj, var):
 
         if (var == None):
-            adj.add_forward("return;".format(var), "goto label{};".format(adj.label_count))
+            adj.add_forward("return;", "goto label{};".format(adj.label_count))
         else:
-            adj.add_forward("return var_{};".format(var), "goto label{};".format(adj.label_count))
-            adj.add_reverse("adj_" + str(var) + " += adj_ret;")
+            for i, v in enumerate(var):
+                adj.add_forward("ret_{} = var_{};".format(i, v))
+                adj.add_reverse("adj_{} += adj_ret_{};".format(v, i))
+            adj.add_forward("return;", "goto label{};".format(adj.label_count))
+
+            # adj.add_forward("return var_{};".format(var), "goto label{};".format(adj.label_count))
+            # adj.add_reverse("adj_" + str(var) + " += adj_ret;")
 
         adj.add_reverse("label{}:;".format(adj.label_count))
 
@@ -435,11 +456,17 @@ class Adjoint:
                 for f in node.body:
                     out = adj.eval(f)
 
-                if 'return' in adj.symbols and adj.symbols['return'] is not None:
-                    out = adj.symbols['return']
+                if ('return', 0) in adj.symbols:  # and adj.symbols['return'] is not None:
+                    out = []  # adj.symbols['return']
+                    i = 0
+                    while True:
+                        if ('return', i) not in adj.symbols:
+                            break
+                        out.append(adj.symbols[('return', i)])
+                        i += 1
                 else:
                     out = None
-                    
+
                 return out
 
             # if statement
@@ -770,7 +797,6 @@ class Adjoint:
                 return adj.eval(node.value)
 
             elif (isinstance(node, ast.Call)):
-
                 name = None
 
                 # determine if call is to a builtin (e.g.: wp.cos(x)), or to a free-func, e.g.: my_func(x)
@@ -790,6 +816,7 @@ class Adjoint:
                 else:
                     raise KeyError("Could not find function {}".format(name))
 
+
                 args = []
 
                 # eval all arguments
@@ -799,6 +826,15 @@ class Adjoint:
 
                 # add var with value type from the function
                 out = adj.add_call(func, args)
+
+
+                # if (isinstance(func, list)):
+                #     print(func[0].key, args, out)
+                # else:
+                #     print(func.key, args, out)
+                # print(out.label)
+                # import ipdb; ipdb.set_trace()
+
                 return out
 
             elif (isinstance(node, ast.Index)):
@@ -844,6 +880,24 @@ class Adjoint:
 
             elif (isinstance(node, ast.Assign)):
 
+                if (isinstance(node.targets[0], ast.Tuple)):
+                    out = adj.eval(node.value)
+
+                    names = []
+                    for v in node.targets[0].dims:
+                        if (isinstance(v, ast.Name)):
+                            names.append(v.id)
+                        else:
+                            raise RuntimeError("Can only assign to tuple of variables")
+                    if len(names) != len(out):
+                        raise RuntimeError("Incorrect number of values to unpack (expected {}, got {})".format(len(out), len(names)))
+                    for name, rhs in zip(names, out):
+                        if (name in adj.symbols):
+                            if (rhs.type != adj.symbols[name].type):
+                                raise TypeError("error, assigning to existing symbol {} ({}) with different type ({})".format(name, adj.symbols[name].type, rhs.type))
+                        adj.symbols[name] = rhs
+                    return out
+
                 # handles the case where we are assigning to an array index (e.g.: arr[i] = 2.0)
                 if (isinstance(node.targets[0], ast.Subscript)):
                     
@@ -866,6 +920,12 @@ class Adjoint:
                     # evaluate rhs
                     rhs = adj.eval(node.value)
 
+                    if (isinstance(rhs, list)):
+                        if len(rhs) == 1:
+                            rhs = rhs[0]
+                        else:
+                            raise RuntimeError("Too many values to unpack (expected 1, got {})".format(len(rhs)))
+
                     # check type matches if symbol already defined
                     if (name in adj.symbols):
                     
@@ -886,13 +946,25 @@ class Adjoint:
             elif (isinstance(node, ast.Return)):
                 cond = adj.cond  # None if not in branch, else branch boolean
 
-                out = adj.eval(node.value)
-                adj.symbols['return'] = out
+                if isinstance(node.value, ast.Tuple):
+                    out = [adj.eval(v) for v in node.value.dims]
+                    for i, o in enumerate(out):
+                        adj.symbols[('return', i)] = o
+                else:
+                    out = adj.eval(node.value)
+                    if out is not None:
+                        adj.symbols[('return', 0)] = out
+                        out = [out]
 
                 if out is not None:        # set return type of function
                     return_var = out
-                    if adj.return_var is not None and adj.return_var.ctype() != return_var.ctype():
-                        raise TypeError(f"Error, function returned different types, previous: {adj.return_var.ctype()}, new {return_var.ctype()}")
+                    if (
+                        adj.return_var is not None
+                        and tuple(v.ctype() for v in adj.return_var) != tuple(v.ctype() for v in return_var)
+                    ):
+                        raise TypeError(
+                            f"Error, function returned different types, previous: {adj.return_var.ctype()}, new {return_var.ctype()}"
+                        )
                     adj.return_var = return_var
 
                 adj.add_return(out)
@@ -1253,7 +1325,8 @@ def codegen_func(adj, device='cpu'):
     # forward header
     # return_type = "void"
 
-    return_type = 'void' if adj.return_var is None else adj.return_var.ctype()
+    # return_type = 'void' if adj.return_var is None else adj.return_var.ctype()
+    return_type = 'void'
 
     forward_args = ""
     reverse_args = ""
@@ -1265,6 +1338,10 @@ def codegen_func(adj, device='cpu'):
         forward_args += sep + arg.ctype() + " var_" + arg.label
         reverse_args += sep + arg.ctype() + " var_" + arg.label
         sep = ", "
+    if adj.return_var is not None:
+        for i, arg in enumerate(adj.return_var):
+            forward_args += sep + arg.ctype() + " & ret_" + str(i)
+            reverse_args += sep + arg.ctype() + " ret_" + str(i)
 
     # reverse args
     sep = ","
@@ -1275,7 +1352,10 @@ def codegen_func(adj, device='cpu'):
             reverse_args += sep + arg.ctype() + " & adj_" + arg.label
         sep = ", "
 
-    reverse_args += sep + return_type + " & adj_ret"
+    if adj.return_var is not None:
+        for i, arg in enumerate(adj.return_var):
+            reverse_args += sep + arg.ctype() + " & adj_ret_" + str(i)
+    # reverse_args += sep + return_type + " & adj_ret"
 
     # codegen body
     forward_body = codegen_func_forward(adj, func_type='function', device=device)

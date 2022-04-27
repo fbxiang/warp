@@ -28,7 +28,7 @@ import warp.config
 class Function:
 
     def __init__(self, func, key, namespace, input_types={}, value_type=None, module=None, variadic=False, doc="", group="", hidden=False):
-        
+
         self.func = func   # points to Python function decorated with @wp.func, may be None for builtins
         self.key = key
         self.namespace = namespace
@@ -329,10 +329,12 @@ class Module:
                 # complete the function return type after we have analyzed it (inferred from return statement in ast)
                 def wrap(adj):
                     def value_type(args):
-                        if (adj.return_var):
-                            return adj.return_var.type
-                        else:
+                        if (adj.return_var is None):
                             return None
+                        elif (isinstance(adj.return_var, list)):
+                            return [v.type for v in adj.return_var]
+                        else:
+                            return adj.return_var.type
 
                     return value_type
 
