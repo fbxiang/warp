@@ -884,7 +884,7 @@ class Adjoint:
                     out = adj.eval(node.value)
 
                     names = []
-                    for v in node.targets[0].dims:
+                    for v in node.targets[0].elts:
                         if (isinstance(v, ast.Name)):
                             names.append(v.id)
                         else:
@@ -947,7 +947,7 @@ class Adjoint:
                 cond = adj.cond  # None if not in branch, else branch boolean
 
                 if isinstance(node.value, ast.Tuple):
-                    out = [adj.eval(v) for v in node.value.dims]
+                    out = [adj.eval(v) for v in node.value.elts]
                     for i, o in enumerate(out):
                         adj.symbols[('return', i)] = o
                 else:
