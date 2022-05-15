@@ -116,14 +116,34 @@ class Tape:
     # returns the adjoint version of a tensor used in the computation
     def get_adjoint(self, a):
         
-        if isinstance(a, wp.array) == False:
+        if not isinstance(a, wp.array) and not isinstance(a, wp.StructInstance):
             # if input is a simple type (e.g.: float, vec3, etc) just return a value copy
             return a
 
         elif a in self.gradients:
             # try and find adjoint array in map
             return self.gradients[a]
-                    
+
+        elif isinstance(a, wp.StructInstance):
+            adj = a.__class__()
+            for name in a.__dict__:
+                if name.startswith("_"):
+                    continue
+                if isinstance(a._struct_.vars[name], wp.array):
+                    arr = getattr(a, name)
+                    if arr in self.gradients:
+                        grad = self.gradients[arr]
+                    elif arr.requires_grad:
+                        grad = wp.zeros_like(arr)
+                        self.gradients[arr] = grad
+                    else:
+                        grad = None
+                    setattr(adj, name, grad)
+                else:
+                    setattr(adj, name, a.__dict__[name])
+            self.gradients[a] = adj
+            return adj
+
         elif wp.type_is_int(a.dtype) or a.requires_grad == False:
             # otherwise if input is an array that is integer typed or doesn't require grad then return null array
             return None

@@ -55,21 +55,33 @@ builtin_operators[ast.NotEq] = "!="
 
 class StructInstance:
     def __init__(self, struct):
-        self.__dict__['_struct_'] = struct
-        self.__dict__['_c_struct_'] = struct.ctype()
+        self.__dict__["_struct_"] = struct
+        self.__dict__["_c_struct_"] = struct.ctype()
 
     def __setattr__(self, name, value):
         assert name in self._struct_.vars
         if isinstance(self._struct_.vars[name], array):
-            assert isinstance(value, array)
-            assert value.dtype == self._struct_.vars[name].dtype
-            setattr(self._c_struct_, name, ctypes.c_void_p(value.ptr))
+            if value is None:
+                setattr(self._c_struct_, name, ctypes.c_void_p(None))
+            else:
+                assert isinstance(value, array)
+                assert value.dtype == self._struct_.vars[name].dtype
+                setattr(self._c_struct_, name, ctypes.c_void_p(value.ptr))
+        elif issubclass(self._struct_.vars[name], ctypes.Array):
+            setattr(self._c_struct_, name, self._struct_.vars[name](*value))
         else:
             setattr(self._c_struct_, name, self._struct_.vars[name]._type_(value))
         self.__dict__[name] = value
 
-class Struct:
+    def __repr__(self):
+        lines = []
+        for k, v in self.__dict__.items():
+            if not k.startswith("_"):
+                lines.append(" " * 4 + f"{k}: {v.__repr__()}")
+        return "StructInstance(\n" + "\n".join(lines) + "\n)\n"
 
+
+class Struct:
     def __init__(self, cls, key, module):
 
         self.cls = cls
@@ -88,6 +100,8 @@ class Struct:
         for label, type in self.vars.items():
             if isinstance(type, array):
                 fields.append((label, ctypes.c_void_p))
+            elif issubclass(type, ctypes.Array):
+                fields.append((label, type))
             else:
                 fields.append((label, type._type_))
 
@@ -96,7 +110,7 @@ class Struct:
 
         self.ctype = StructType
 
-        if (module):
+        if module:
             module.register_struct(self)
 
     def __call__(self):
