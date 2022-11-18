@@ -663,3 +663,11 @@ class ScopedTimer:
 
             ScopedTimer.indent -= 1
 
+
+def csr_solve_lt_device(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None):
+    if n is None:
+        n = b.shape[0]
+    if nnz is None:
+        nnz = A.shape[0]
+
+    wp.context.runtime.core.csr_solve_lt_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)

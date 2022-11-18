@@ -125,6 +125,7 @@ void array_scan_float_host(uint64_t in, uint64_t out, int len, bool inclusive)
 #include "volume.cpp"
 #include "marching.cpp"
 #include "cutlass_gemm.cpp"
+#include "sparse.cpp"
 
 
 // stubs for platforms where there is no CUDA

@@ -138,6 +138,7 @@ int cuda_init()
             {
                 return -1;
             }
+            wp::init_cusparse();
         }
     }
     else

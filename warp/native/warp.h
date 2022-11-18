@@ -162,4 +162,5 @@ extern "C"
     WP_API void cuda_set_context_restore_policy(bool always_restore);
     WP_API int cuda_get_context_restore_policy();
 
+    WP_API void csr_solve_lt_device(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
 } // extern "C"
