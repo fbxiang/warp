@@ -1,5 +1,6 @@
 #include "sparse.h"
 #include "warp.h"
+#include <cusparse_v2.h>
 
 namespace wp {
 
@@ -15,14 +16,14 @@ bool init_cusparse() {
 }
 void destroy_cusparse() { cusparseDestroy(g_cusparse_handle); }
 
-cusparseHandle_t get_cusparse_handle() { return g_cusparse_handle; }
+void* get_cusparse_handle() { return (void*)g_cusparse_handle; }
 
 } // namespace wp
 
 template <cusparseFillMode_t fillmode, cusparseDiagType_t diagtype>
 static void csr_solve_device_(int n, int nnz, int *offsets, int *columns,
                               float *values, float *X, float *Y) {
-  cusparseHandle_t handle = wp::get_cusparse_handle();
+  cusparseHandle_t handle = (cusparseHandle_t)wp::get_cusparse_handle();
   cusparseSetStream(handle, (cudaStream_t)cuda_stream_get_current());
 
   cusparseOperation_t op = CUSPARSE_OPERATION_NON_TRANSPOSE;
