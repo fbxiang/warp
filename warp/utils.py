@@ -671,3 +671,34 @@ def csr_solve_lt_device(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.ar
         nnz = A.shape[0]
 
     wp.context.runtime.core.csr_solve_lt_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
+
+
+def csr_solve_host(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None):
+    if n is None:
+        n = b.shape[0]
+    if nnz is None:
+        nnz = A.shape[0]
+
+    wp.context.runtime.core.csr_solve_host(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
+
+
+def csc_solve_host(offsets: wp.array, rows: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None):
+    if n is None:
+        n = b.shape[0]
+    if nnz is None:
+        nnz = A.shape[0]
+
+    wp.context.runtime.core.csc_solve_host(n, nnz, offsets.ptr, rows.ptr, A.ptr, b.ptr, x.ptr)
+
+
+def csr_print(offsets: wp.array, cols: wp.array, A, n=None, nnz=None):
+    if n is None:
+        n = offsets.shape[0] - 1
+    if nnz is None:
+        nnz = A.shape[0]
+
+    offsets = offsets.numpy()
+    cols = cols.numpy()
+    A = A.numpy()
+    from scipy.sparse import csr_matrix
+    print(csr_matrix((A[:nnz], cols[:nnz], offsets[:(n+1)]), (n, n)).todense())
