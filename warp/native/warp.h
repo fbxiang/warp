@@ -163,6 +163,8 @@ extern "C"
     WP_API int cuda_get_context_restore_policy();
 
     WP_API void csr_solve_lt_device(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
+    WP_API void csr_ichol_device(int n, int nnz, int *offsets, int *columns, float *values, float *L_values);
+    WP_API void csr_ilu_device(int n, int nnz, int *offsets, int *columns, float *values, float *LU_values);
 
     WP_API void csr_solve_host(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
     WP_API void csc_solve_host(int n, int nnz, int *offsets, int *rows, float *values, float *X, float *Y);

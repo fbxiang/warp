@@ -672,6 +672,26 @@ def csr_solve_lt_device(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.ar
 
     wp.context.runtime.core.csr_solve_lt_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
 
+def csr_ichol_device(offsets: wp.array, cols: wp.array, A: wp.array, L: wp.array, n=None, nnz=None):
+    if n is None:
+        n = offsets.shape[0] - 1
+    if nnz is None:
+        nnz = A.shape[0]
+
+    wp.context.runtime.core.csr_ichol_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, L.ptr)
+
+def csr_ilu_device(offsets: wp.array, cols: wp.array, A: wp.array, LU: wp.array, n=None, nnz=None):
+    '''
+    L: lower triangular part of LU, unit diagonal
+    U: upper triangular part of LU, non-unit diagonal
+    '''
+    if n is None:
+        n = offsets.shape[0] - 1
+    if nnz is None:
+        nnz = A.shape[0]
+
+    wp.context.runtime.core.csr_ilu_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, LU.ptr)
+
 
 def csr_solve_host(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None):
     if n is None:

@@ -1059,6 +1059,7 @@ size_t cuda_launch_kernel(void* context, void* kernel, size_t dim, void** args)
 #include "volume.cu"
 #include "volume_builder.cu"
 #include "cutlass_gemm.cu"
+#include "sparse.cu"
 
 //#include "spline.inl"
 //#include "volume.inl"
