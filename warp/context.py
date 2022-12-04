@@ -300,6 +300,9 @@ class Kernel:
         if (module):
             module.register_kernel(self)
 
+    def get_args(self):
+        return self.adj.args
+
     # lookup and cache entry points based on name, called after compilation / module load
     def get_hooks(self, device):
 
@@ -323,6 +326,131 @@ class Kernel:
         device_hooks[self] = hooks
         return hooks
 
+
+class CustomKernel:
+
+    def __init__(self, *, key, module):
+        self.key = key
+        self.module = module
+        self.module.register_custom_kernel(self)
+
+    def get_cpp_source(self):
+        raise NotImplementedError
+
+    def get_cu_source(self):
+        raise NotImplementedError
+
+    def build(self, builder):
+        pass
+
+    def get_hash_source(self):
+        pass
+
+    def get_args(self):
+        pass
+
+    # # lookup and cache entry points based on name, called after compilation / module load
+    def get_hooks(self, device):
+
+        # get dictionary of hooks for the given device
+        device_hooks = self.module.kernel_hooks.get(device.context, {})
+
+        # look up this kernel
+        hooks = device_hooks.get(self)
+        if hooks is not None:
+            return hooks
+
+        if device.is_cpu:
+            forward = eval("self.module.dll." + self.key + "_cpu_forward")
+            backward = eval("self.module.dll." + self.key + "_cpu_backward")
+        else:
+            cu_module = self.module.cuda_modules[device.context]
+            forward = runtime.core.cuda_get_kernel(device.context, cu_module, (self.key + "_cuda_kernel_forward").encode('utf-8'))
+            backward = runtime.core.cuda_get_kernel(device.context, cu_module, (self.key + "_cuda_kernel_backward").encode('utf-8'))
+
+        hooks = KernelHooks(forward, backward)
+        device_hooks[self] = hooks
+        return hooks
+
+
+class Reduce(CustomKernel):
+
+    def __init__(self, func):
+        module = get_module(inspect.getmodule(inspect.stack()[1][0]).__name__)
+        key = "reduce_" + func.key
+        super().__init__(key=key, module=module)
+        self.func = func
+
+    def get_cpp_source(self):
+        return ""
+
+    def get_cu_source(self):
+        return '''
+__device__ void warp_{key}(volatile {T} *sdata, unsigned int tid) {{
+  if ({blockSize} >= 64)
+    sdata[tid] = {func_name}(sdata[tid], sdata[tid + 32]);
+  if ({blockSize} >= 32)
+    sdata[tid] = {func_name}(sdata[tid], sdata[tid + 16]);
+  if ({blockSize} >= 16)
+    sdata[tid] = {func_name}(sdata[tid], sdata[tid + 8]);
+  if ({blockSize} >= 8)
+    sdata[tid] = {func_name}(sdata[tid], sdata[tid + 4]);
+  if ({blockSize} >= 4)
+    sdata[tid] = {func_name}(sdata[tid], sdata[tid + 2]);
+  if ({blockSize} >= 2)
+    sdata[tid] = {func_name}(sdata[tid], sdata[tid + 1]);
+}}
+
+extern "C" __global__ void {key}_cuda_kernel_forward(launch_bounds_t dim, array_t<{T}> g_idata, array_t<{T}> g_odata, int n) {{
+  __shared__ {T} sdata[{blockSize}];
+  unsigned int tid = threadIdx.x;
+  unsigned int i = blockIdx.x * ({blockSize} * 2) + tid;
+  unsigned int gridSize = {blockSize} * 2 * gridDim.x;
+  sdata[tid] = 0;
+  while (i < n) {{
+    sdata[tid] = {func_name}(wp::load(g_idata, i), wp::load(g_idata, i + {blockSize}));
+    i += gridSize;
+  }}
+  __syncthreads();
+  if ({blockSize} >= 512) {{
+    if (tid < 256) {{
+      sdata[tid] += sdata[tid + 256];
+    }}
+    __syncthreads();
+  }}
+  if ({blockSize} >= 256) {{
+    if (tid < 128) {{
+      sdata[tid] += sdata[tid + 128];
+    }}
+    __syncthreads();
+  }}
+  if ({blockSize} >= 128) {{
+    if (tid < 64) {{
+      sdata[tid] += sdata[tid + 64];
+    }}
+    __syncthreads();
+  }}
+  if (tid < 32)
+    warp_{key}(sdata, tid);
+  if (tid == 0)
+    wp::store(g_odata, blockIdx.x, sdata[0]);
+}}
+        '''.format(func_name=self.func.key, key=self.key, blockSize=256, T=self.func.adj.args[0].ctype())
+
+
+    def build(self, builder):
+        import ipdb; ipdb.set_trace()
+        self.func.adj.build(builder)
+
+    def get_hash_source(self):
+        return self.func.adj.source + self.get_cu_source() + self.get_cpp_source()
+
+    def get_args(self):
+        return [
+            warp.codegen.Var("input", warp.array(dtype=self.func.adj.args[0].type)),
+            warp.codegen.Var("output", warp.array(dtype=self.func.adj.args[0].type)),
+            warp.codegen.Var("n", warp.int32)
+        ]
 
 #----------------------
 
@@ -647,6 +775,9 @@ class ModuleBuilder:
             cu_source += warp.codegen.codegen_kernel(kernel, device="cuda", options=self.options)
             cu_source += warp.codegen.codegen_module(kernel, device="cuda")
 
+        for kernel in self.module.custom_kernels.values():
+            cu_source += kernel.get_cu_source()
+
         # add headers
         cu_source = warp.codegen.cuda_module_header + cu_source
 
@@ -665,6 +796,7 @@ class Module:
         self.loader = loader
 
         self.kernels = {}
+        self.custom_kernels = {}
         self.functions = {}
         self.constants = []
         self.structs = []
@@ -727,6 +859,17 @@ class Module:
 
         # for a reload of module on next launch
         self.unload()
+
+
+    def register_custom_kernel(self, kernel):
+
+        self.custom_kernels[kernel.key] = kernel
+
+        # TODO: add ref
+
+        # for a reload of module on next launch
+        self.unload()
+
 
     def register_function(self, func):
         
@@ -812,7 +955,10 @@ class Module:
                 for kernel in module.kernels.values():
                     s = kernel.adj.source
                     ch.update(bytes(s, 'utf-8'))
-                
+
+                for kernel in module.custom_kernels.values():
+                    ch.update(bytes(kernel.get_hash_source(), 'utf-8'))
+
                 module.content_hash = ch.digest()
 
             h = hashlib.sha256()
@@ -2093,7 +2239,7 @@ def launch(kernel, dim: Tuple[int], inputs:List, outputs:List=[], adj_inputs:Lis
         device = runtime.get_device(device)
 
     # check function is a Kernel
-    if isinstance(kernel, Kernel) == False:
+    if isinstance(kernel, Kernel) == False and isinstance(kernel, CustomKernel) == False:
         raise RuntimeError("Error launching kernel, can only launch functions decorated with @wp.kernel.")
 
     # debugging aid
@@ -2118,9 +2264,10 @@ def launch(kernel, dim: Tuple[int], inputs:List, outputs:List=[], adj_inputs:Lis
         def pack_args(args, params):
 
             for i, a in enumerate(args):
+                kernel_args = kernel.get_args()
 
-                arg_type = kernel.adj.args[i].type
-                arg_name = kernel.adj.args[i].label
+                arg_type = kernel_args[i].type
+                arg_name = kernel_args[i].label
 
                 if (isinstance(arg_type, warp.types.array)):
 
@@ -2195,8 +2342,8 @@ def launch(kernel, dim: Tuple[int], inputs:List, outputs:List=[], adj_inputs:Lis
         fwd_args = inputs + outputs
         adj_args = adj_inputs + adj_outputs
 
-        if (len(fwd_args)) != (len(kernel.adj.args)): 
-            raise RuntimeError(f"Error launching kernel '{kernel.key}', passed {len(fwd_args)} arguments but kernel requires {len(kernel.adj.args)}.")
+        if (len(fwd_args)) != (len(kernel.get_args())):
+            raise RuntimeError(f"Error launching kernel '{kernel.key}', passed {len(fwd_args)} arguments but kernel requires {len(kernel_args)}.")
 
         pack_args(fwd_args, params)
         pack_args(adj_args, params)
