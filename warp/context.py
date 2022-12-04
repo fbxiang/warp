@@ -385,6 +385,7 @@ class Reduce(CustomKernel):
         return ""
 
     def get_cu_source(self):
+        # https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
         return '''
 __device__ void warp_{key}(volatile {T} *sdata, unsigned int tid) {{
   if ({blockSize} >= 64)
