@@ -1995,5 +1995,41 @@ class MarchingCubes:
         self.indices.size = num_tris.value*3
 
 
+class CSRMatrix:
 
+    def __init__(self, offsets, cols, values, m=None, nnz=None):
+        # TODO: asserts
+        from warp.context import runtime
+        if m is None:
+            m = offsets.shape[0] - 1
+        if nnz is None:
+            nnz = values.shape[0]
 
+        self.device = offsets.device
+        self.offsets = offsets
+        self.cols = cols
+        self.values = values
+        self.m = m
+        self.nnz = nnz
+        self.id = runtime.core.csr_create_device(m, nnz, offsets.ptr, cols.ptr, values.ptr)
+
+    def __del__(self):
+        from warp.context import runtime
+        with self.device.context_guard:
+            runtime.core.csr_destroy_device(self.id)
+
+class DenseVector:
+    def __init__(self, values, m=None):
+        from warp.context import runtime
+        if m is None:
+            m = values.shape[0]
+
+        self.device = values.device
+        self.values = values
+        self.m = m
+        self.id = runtime.core.dense_vector_create_device(m, values.ptr)
+
+    def __del__(self):
+        from warp.context import runtime
+        with self.device.context_guard:
+            runtime.core.dense_vector_destroy_device(self.id)

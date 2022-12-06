@@ -672,15 +672,33 @@ def csr_solve_lt_device(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.ar
 
     wp.context.runtime.core.csr_solve_lt_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
 
-def csr_ichol_device(offsets: wp.array, cols: wp.array, A: wp.array, L: wp.array, n=None, nnz=None):
+
+# TODO delete
+def csr_ichol_device_buffer_size(offsets: wp.array, cols: wp.array, A: wp.array, n=None, nnz=None):
     if n is None:
         n = offsets.shape[0] - 1
     if nnz is None:
         nnz = A.shape[0]
 
-    wp.context.runtime.core.csr_ichol_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, L.ptr)
+    return wp.context.runtime.core.csr_ichol_device_buffer_size(n, nnz, offsets.ptr, cols.ptr, A.ptr)
 
-def csr_ilu_device(offsets: wp.array, cols: wp.array, A: wp.array, LU: wp.array, n=None, nnz=None):
+def csr_ichol_device(offsets: wp.array, cols: wp.array, A: wp.array, L: wp.array, buffer: wp.array, n=None, nnz=None):
+    if n is None:
+        n = offsets.shape[0] - 1
+    if nnz is None:
+        nnz = A.shape[0]
+
+    wp.context.runtime.core.csr_ichol_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, L.ptr, buffer.ptr)
+
+def csr_ilu_device_buffer_size(offsets: wp.array, cols: wp.array, A: wp.array, n=None, nnz=None):
+    if n is None:
+        n = offsets.shape[0] - 1
+    if nnz is None:
+        nnz = A.shape[0]
+
+    return wp.context.runtime.core.csr_ilu_device_buffer_size(n, nnz, offsets.ptr, cols.ptr, A.ptr)
+
+def csr_ilu_device(offsets: wp.array, cols: wp.array, A: wp.array, LU: wp.array, buffer: wp.array, n=None, nnz=None):
     '''
     L: lower triangular part of LU, unit diagonal
     U: upper triangular part of LU, non-unit diagonal
@@ -690,7 +708,25 @@ def csr_ilu_device(offsets: wp.array, cols: wp.array, A: wp.array, LU: wp.array,
     if nnz is None:
         nnz = A.shape[0]
 
-    wp.context.runtime.core.csr_ilu_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, LU.ptr)
+    wp.context.runtime.core.csr_ilu_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, LU.ptr, buffer.ptr)
+
+
+def csr_mv_device_buffer_size(offsets: wp.array, cols: wp.array, A: wp.array, x: wp.array, y: wp.array, alpha: float, beta: float, n=None, nnz=None):
+    if n is None:
+        n = offsets.shape[0] - 1
+    if nnz is None:
+        nnz = A.shape[0]
+
+    return wp.context.runtime.core.csr_mv_device_buffer_size(n, nnz, offsets.ptr, cols.ptr, A.ptr, x.ptr, y.ptr, alpha, beta)
+
+
+def csr_mv_device(offsets: wp.array, cols: wp.array, A: wp.array, x: wp.array, y: wp.array, alpha: float, beta: float, buffer: wp.array, n=None, nnz=None):
+    if n is None:
+        n = offsets.shape[0] - 1
+    if nnz is None:
+        nnz = A.shape[0]
+
+    return wp.context.runtime.core.csr_mv_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, x.ptr, y.ptr, alpha, beta, buffer.ptr)
 
 
 def csr_solve_host(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None):

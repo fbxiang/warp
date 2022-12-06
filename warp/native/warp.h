@@ -163,8 +163,24 @@ extern "C"
     WP_API int cuda_get_context_restore_policy();
 
     WP_API void csr_solve_lt_device(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
-    WP_API void csr_ichol_device(int n, int nnz, int *offsets, int *columns, float *values, float *L_values);
-    WP_API void csr_ilu_device(int n, int nnz, int *offsets, int *columns, float *values, float *LU_values);
+
+    WP_API uint64_t csr_create_device(int m, int nnz, int *d_offsets, int *d_columns, float *d_values);
+    WP_API void csr_destroy_device(uint64_t id);
+
+    WP_API uint64_t dense_vector_create_device(int m, float *d_values);
+    WP_API void dense_vector_destroy_device(uint64_t id);
+
+    WP_API int csr_ichol_device_buffer_size(uint64_t id);
+    WP_API void csr_ichol_device(uint64_t id, float *L_values, void *buffer);
+    WP_API int csr_ilu_device_buffer_size(uint64_t id);
+    WP_API void csr_ilu_device(uint64_t id, float *LU_values, void *buffer);
+
+
+    int csr_mv_device_buffer_size(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, float beta);
+    void csr_mv_device(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, float beta, void *buffer);
+
+    // WP_API int csr_mv_device_buffer_size(int m, int nnz, int *offsets, int *columns, float *values, float *x, float *y, float alpha, float beta);
+    // WP_API void csr_mv_device(int m, int nnz, int *offsets, int *columns, float *values, float *x, float *y, float alpha, float beta, void *buffer);
 
     WP_API void csr_solve_host(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
     WP_API void csc_solve_host(int n, int nnz, int *offsets, int *rows, float *values, float *X, float *Y);

@@ -1543,10 +1543,44 @@ class Runtime:
         self.core.csr_solve_lt_device.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
         self.core.csr_solve_lt_device.restype = None
 
-        self.core.csr_ichol_device.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        self.core.csr_create_device.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        self.core.csr_create_device.restype = ctypes.c_uint64
+        self.core.dense_vector_create_device.argtypes = [ctypes.c_int, ctypes.c_void_p]
+        self.core.dense_vector_create_device.restype = ctypes.c_uint64
+
+        self.core.csr_destroy_device.argtypes = [ctypes.c_uint64]
+        self.core.csr_destroy_device.restype = None
+        self.core.dense_vector_destroy_device.argtypes = [ctypes.c_uint64]
+        self.core.dense_vector_destroy_device.restype = None
+
+        self.core.csr_ichol_device_buffer_size.argtypes = [ctypes.c_uint64]
+        self.core.csr_ichol_device_buffer_size.restype = ctypes.c_int
+        self.core.csr_ichol_device.argtypes = [ctypes.c_uint64, ctypes.c_void_p, ctypes.c_void_p]
         self.core.csr_ichol_device.restype = None
-        self.core.csr_ilu_device.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+
+        self.core.csr_ilu_device_buffer_size.argtypes = [ctypes.c_uint64]
+        self.core.csr_ilu_device_buffer_size.restype = ctypes.c_int
+        self.core.csr_ilu_device.argtypes = [ctypes.c_uint64, ctypes.c_void_p, ctypes.c_void_p]
         self.core.csr_ilu_device.restype = None
+
+        # self.core.csr_ichol_device_buffer_size.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        # self.core.csr_ichol_device_buffer_size.restype = ctypes.c_int
+        # self.core.csr_ichol_device.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        # self.core.csr_ichol_device.restype = None
+
+        # self.core.csr_ilu_device_buffer_size.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        # self.core.csr_ilu_device_buffer_size.restype = ctypes.c_int
+        # self.core.csr_ilu_device.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        # self.core.csr_ilu_device.restype = None
+
+        # self.core.csr_mv_device_buffer_size.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_float]
+        # self.core.csr_mv_device_buffer_size.restype = ctypes.c_int
+        # self.core.csr_mv_device.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_float, ctypes.c_void_p]
+        # self.core.csr_mv_device.restype = None
+        self.core.csr_mv_device_buffer_size.argtypes = [ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float]
+        self.core.csr_mv_device_buffer_size.restype = ctypes.c_int
+        self.core.csr_mv_device.argtypes = [ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float, ctypes.c_void_p]
+        self.core.csr_mv_device.restype = None
 
         self.core.csr_solve_host.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
         self.core.csr_solve_host.restype = None
