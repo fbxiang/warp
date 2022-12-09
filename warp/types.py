@@ -1996,8 +1996,16 @@ class MarchingCubes:
 
 
 class CSRMatrix:
+    FILL_MODE_LOWER = 0
+    FILL_MODE_UPPER = 1
+    DIAG_TYPE_NON_UNIT = 0
+    DIAG_TYPE_UNIT = 1
 
-    def __init__(self, offsets, cols, values, m=None, nnz=None):
+    def __init__(self, offsets, cols, values, m=None, nnz=None, fill_mode="lower", diag_type="non_unit"):
+        # only used for triangular solve
+        assert fill_mode in ["lower", "upper"]
+        assert diag_type in ["non_unit", "unit"]
+
         # TODO: asserts
         from warp.context import runtime
         if m is None:
@@ -2011,7 +2019,12 @@ class CSRMatrix:
         self.values = values
         self.m = m
         self.nnz = nnz
-        self.id = runtime.core.csr_create_device(m, nnz, offsets.ptr, cols.ptr, values.ptr)
+        self.fill_mode = fill_mode
+        self.diag_type = diag_type
+        self.id = runtime.core.csr_create_device(m, nnz, offsets.ptr, cols.ptr, values.ptr,
+                                                 CSRMatrix.FILL_MODE_LOWER if fill_mode == "lower" else CSRMatrix.FILL_MODE_UPPER,
+                                                 CSRMatrix.DIAG_TYPE_NON_UNIT if diag_type == "non_unit" else CSRMatrix.DIAG_TYPE_UNIT)
+
 
     def __del__(self):
         from warp.context import runtime

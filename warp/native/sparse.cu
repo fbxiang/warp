@@ -43,11 +43,13 @@ template <typename T> struct CSRMatrix {
   T *values{};
   cusparseMatDescr_t matDescr{};
   cusparseSpMatDescr_t spMatDescr{};
+
   csric02Info_t icInfo{};
   csrilu02Info_t iluInfo{};
+  cusparseSpSVDescr_t svInfo{};
 };
 
-template<typename T> struct DenseVector {
+template <typename T> struct DenseVector {
   int m{};
   T *values{};
   cusparseDnVecDescr_t vecDescr{};
@@ -58,7 +60,7 @@ uint64_t dense_vector_create_device(int m, float *d_values) {
   vec->m = m;
   vec->values = d_values;
   cusparseCreateDnVec(&vec->vecDescr, m, d_values, CUDA_R_32F);
-  return (uint64_t) vec;
+  return (uint64_t)vec;
 }
 
 void dense_vector_destroy_device(uint64_t id) {
@@ -67,7 +69,8 @@ void dense_vector_destroy_device(uint64_t id) {
   delete vec;
 }
 
-uint64_t csr_create_device(int m, int nnz, int *d_offsets, int *d_columns, float *d_values) {
+uint64_t csr_create_device(int m, int nnz, int *d_offsets, int *d_columns, float *d_values, int fillmode,
+                           int diagtype) {
   CSRMatrix<float> *mat = new CSRMatrix<float>;
   mat->m = m;
   mat->nnz = nnz;
@@ -78,11 +81,17 @@ uint64_t csr_create_device(int m, int nnz, int *d_offsets, int *d_columns, float
   cusparseCreateMatDescr(&mat->matDescr);
   cusparseSetMatIndexBase(mat->matDescr, CUSPARSE_INDEX_BASE_ZERO);
   cusparseSetMatType(mat->matDescr, CUSPARSE_MATRIX_TYPE_GENERAL);
-  cusparseSetMatFillMode(mat->matDescr, CUSPARSE_FILL_MODE_LOWER);
-  cusparseSetMatDiagType(mat->matDescr, CUSPARSE_DIAG_TYPE_NON_UNIT);
+
+  cusparseFillMode_t fillmode_ = (cusparseFillMode_t)fillmode;
+  cusparseDiagType_t diagtype_ = (cusparseDiagType_t)diagtype;
+
+  cusparseSetMatFillMode(mat->matDescr, fillmode_);
+  cusparseSetMatDiagType(mat->matDescr, diagtype_);
 
   cusparseCreateCsr(&mat->spMatDescr, m, m, nnz, d_offsets, d_columns, d_values, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
                     CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F);
+  cusparseSpMatSetAttribute(mat->spMatDescr, CUSPARSE_SPMAT_FILL_MODE, &fillmode_, sizeof(cusparseFillMode_t));
+  cusparseSpMatSetAttribute(mat->spMatDescr, CUSPARSE_SPMAT_DIAG_TYPE, &diagtype_, sizeof(cusparseDiagType_t));
 
   return (uint64_t)mat;
 }
@@ -245,8 +254,8 @@ template <typename ValueType = float> static void _csr_ilu_device(uint64_t matA,
                                         A->iluInfo, CUSPARSE_SOLVE_POLICY_NO_LEVEL, buffer);
   // TODO
   // int structural_zero; cusparseXcsrilu02_zeroPivot(cusparse_handle, infoM, &structural_zero);
-  cusparseXcsrilu02<ValueType>(cusparse_handle, A->m, A->nnz, A->matDescr, LU_values, A->offsets, A->columns, A->iluInfo,
-                               CUSPARSE_SOLVE_POLICY_NO_LEVEL, buffer);
+  cusparseXcsrilu02<ValueType>(cusparse_handle, A->m, A->nnz, A->matDescr, LU_values, A->offsets, A->columns,
+                               A->iluInfo, CUSPARSE_SOLVE_POLICY_NO_LEVEL, buffer);
   // TODO
   // int numerical_zero; cusparseXcsrilu02_zeroPivot(cusparse_handle, infoM, &numerical_zero);
 }
@@ -259,9 +268,8 @@ static int _csr_mv_device_buffer_size(uint64_t idA, uint64_t idX, uint64_t idY, 
   DenseVector<ValueType> *Y = (DenseVector<ValueType> *)idY;
   size_t bufferSize{};
   constexpr cudaDataType valueType = std::is_same<ValueType, float>::value ? CUDA_R_32F : CUDA_R_64F;
-  cusparseSpMV_bufferSize(cusparse_handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, A->spMatDescr,
-                          X->vecDescr, &beta, Y->vecDescr, valueType,
-                          CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize);
+  cusparseSpMV_bufferSize(cusparse_handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, A->spMatDescr, X->vecDescr, &beta,
+                          Y->vecDescr, valueType, CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize);
   return (int)bufferSize;
 }
 
@@ -273,56 +281,9 @@ static void _csr_mv_device(uint64_t idA, uint64_t idX, uint64_t idY, ValueType a
   DenseVector<ValueType> *Y = (DenseVector<ValueType> *)idY;
 
   constexpr cudaDataType valueType = std::is_same<ValueType, float>::value ? CUDA_R_32F : CUDA_R_64F;
-  cusparseSpMV(cusparse_handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, A->spMatDescr,
-               X->vecDescr, &beta, Y->vecDescr, valueType,
-               CUSPARSE_SPMV_ALG_DEFAULT, buffer);
+  cusparseSpMV(cusparse_handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, A->spMatDescr, X->vecDescr, &beta,
+               Y->vecDescr, valueType, CUSPARSE_SPMV_ALG_DEFAULT, buffer);
 }
-
-// template <typename ValueType = float>
-// static int _csr_mv_device_buffer_size(int m, int nnz, int *offsets, int *columns, ValueType *values, ValueType *x,
-//                                       ValueType *y, ValueType alpha, ValueType beta) {
-//   cusparseHandle_t cusparse_handle = (cusparseHandle_t)wp::get_cusparse_handle();
-
-//   constexpr cudaDataType valueType = std::is_same<ValueType, float>::value ? CUDA_R_32F : CUDA_R_64F;
-//   cusparseSpMatDescr_t matA{};
-//   cusparseDnVecDescr_t vecX{};
-//   cusparseDnVecDescr_t vecY{};
-//   cusparseCreateCsr(&matA, m, m, nnz, offsets, columns, values, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
-//                     CUSPARSE_INDEX_BASE_ZERO, valueType);
-//   cusparseCreateDnVec(&vecX, m, x, valueType);
-//   cusparseCreateDnVec(&vecY, m, y, valueType);
-
-//   size_t bufferSize{};
-
-//   cusparseSpMV_bufferSize(cusparse_handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, matA, vecX, &beta, vecY, valueType,
-//                           CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize);
-
-//   cusparseDestroySpMat(matA);
-//   cusparseDestroyDnVec(vecX);
-//   cusparseDestroyDnVec(vecY);
-//   return (int)bufferSize;
-// }
-
-// template <typename ValueType = float>
-// static void _csr_mv_device(int m, int nnz, int *offsets, int *columns, ValueType *values, ValueType *x, ValueType *y,
-//                            ValueType alpha, ValueType beta, void *buffer) {
-//   cusparseHandle_t cusparse_handle = (cusparseHandle_t)wp::get_cusparse_handle();
-
-//   constexpr cudaDataType valueType = std::is_same<ValueType, float>::value ? CUDA_R_32F : CUDA_R_64F;
-//   cusparseSpMatDescr_t matA{};
-//   cusparseDnVecDescr_t vecX{};
-//   cusparseDnVecDescr_t vecY{};
-//   cusparseCreateCsr(&matA, m, m, nnz, offsets, columns, values, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
-//                     CUSPARSE_INDEX_BASE_ZERO, valueType);
-//   cusparseCreateDnVec(&vecX, m, x, valueType);
-//   cusparseCreateDnVec(&vecY, m, y, valueType);
-
-//   cusparseSpMV(cusparse_handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, matA, vecX, &beta, vecY, valueType,
-//                CUSPARSE_SPMV_ALG_DEFAULT, buffer);
-//   cusparseDestroySpMat(matA);
-//   cusparseDestroyDnVec(vecX);
-//   cusparseDestroyDnVec(vecY);
-// }
 
 int csr_ichol_device_buffer_size(uint64_t id) { return _csr_ichol_device_buffer_size<float>(id); }
 void csr_ichol_device(uint64_t id, float *L_values, void *buffer) { _csr_ichol_device<float>(id, L_values, buffer); }
@@ -611,50 +572,49 @@ void csr_mv_device(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, float 
 //   cudaFreeAsync(L_values, stream);
 // }
 
-template <cusparseOperation_t op, cusparseFillMode_t fillmode, cusparseDiagType_t diagtype>
-static void csr_solve_tri_device_(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y) {
+template <typename ValueType>
+static int _csr_sv_device_buffer_size(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, int op) {
   cusparseHandle_t handle = (cusparseHandle_t)wp::get_cusparse_handle();
-  cusparseSetStream(handle, (cudaStream_t)cuda_stream_get_current());
+  CSRMatrix<ValueType> *A = (CSRMatrix<ValueType> *)idA;
+  DenseVector<ValueType> *X = (DenseVector<ValueType> *)idX;
+  DenseVector<ValueType> *Y = (DenseVector<ValueType> *)idY;
 
-  float alpha = 1.f;
+  constexpr cudaDataType valueType = std::is_same<ValueType, float>::value ? CUDA_R_32F : CUDA_R_64F;
 
-  cusparseSpMatDescr_t matA;
-  cusparseDnVecDescr_t vecX;
-  cusparseDnVecDescr_t vecY;
+  if (!A->svInfo) {
+    cusparseSpSV_createDescr(&A->svInfo);
+  }
 
-  cusparseSpSVDescr_t spsvDescr;
+  size_t bufferSize{0};
+  cusparseSpSV_bufferSize(handle, (cusparseOperation_t)op, &alpha, A->spMatDescr, X->vecDescr, Y->vecDescr, valueType,
+                          CUSPARSE_SPSV_ALG_DEFAULT, A->svInfo, &bufferSize);
 
-  cusparseCreateCsr(&matA, n, n, nnz, offsets, columns, values, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
-                    CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F);
-
-  cusparseCreateDnVec(&vecX, n, X, CUDA_R_32F);
-  cusparseCreateDnVec(&vecY, n, Y, CUDA_R_32F);
-
-  cusparseSpSV_createDescr(&spsvDescr);
-
-  cusparseFillMode_t fillmode_ = fillmode;
-  cusparseDiagType_t diagtype_ = diagtype;
-
-  cusparseSpMatSetAttribute(matA, CUSPARSE_SPMAT_FILL_MODE, &fillmode_, sizeof(fillmode));
-  cusparseSpMatSetAttribute(matA, CUSPARSE_SPMAT_DIAG_TYPE, &diagtype_, sizeof(diagtype));
-
-  size_t bufferSize = 0;
-  void *buffer = nullptr;
-  cusparseSpSV_bufferSize(handle, op, &alpha, matA, vecX, vecY, CUDA_R_32F, CUSPARSE_SPSV_ALG_DEFAULT, spsvDescr,
-                          &bufferSize);
-
-  cudaMalloc(&buffer, bufferSize); // preallocate?
-  cusparseSpSV_analysis(handle, op, &alpha, matA, vecX, vecY, CUDA_R_32F, CUSPARSE_SPSV_ALG_DEFAULT, spsvDescr, buffer);
-  cusparseSpSV_solve(handle, op, &alpha, matA, vecX, vecY, CUDA_R_32F, CUSPARSE_SPSV_ALG_DEFAULT, spsvDescr);
-
-  cusparseDestroySpMat(matA);
-  cusparseDestroyDnVec(vecX);
-  cusparseDestroyDnVec(vecY);
-  cusparseSpSV_destroyDescr(spsvDescr);
-  cudaFree(buffer);
+  return (int)bufferSize;
 }
 
-void csr_solve_lt_device(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y) {
-  csr_solve_tri_device_<CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_FILL_MODE_LOWER, CUSPARSE_DIAG_TYPE_NON_UNIT>(
-      n, nnz, offsets, columns, values, X, Y);
+template <typename ValueType>
+static void _csr_sv_device(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, int op, void *buffer) {
+  cusparseHandle_t handle = (cusparseHandle_t)wp::get_cusparse_handle();
+  CSRMatrix<ValueType> *A = (CSRMatrix<ValueType> *)idA;
+  DenseVector<ValueType> *X = (DenseVector<ValueType> *)idX;
+  DenseVector<ValueType> *Y = (DenseVector<ValueType> *)idY;
+
+  constexpr cudaDataType valueType = std::is_same<ValueType, float>::value ? CUDA_R_32F : CUDA_R_64F;
+
+  if (A->svInfo) {
+    cusparseSpSV_createDescr(&A->svInfo);
+  }
+
+  cusparseSpSV_analysis(handle, (cusparseOperation_t)op, &alpha, A->spMatDescr, X->vecDescr, Y->vecDescr, valueType,
+                        CUSPARSE_SPSV_ALG_DEFAULT, A->svInfo, buffer);
+  cusparseSpSV_solve(handle, (cusparseOperation_t)op, &alpha, A->spMatDescr, X->vecDescr, Y->vecDescr, valueType,
+                     CUSPARSE_SPSV_ALG_DEFAULT, A->svInfo);
+}
+
+int csr_sv_device_buffer_size(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, int op) {
+  return _csr_sv_device_buffer_size<float>(idA, idX, idY, alpha, op);
+}
+
+void csr_sv_device(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, int op, void *buffer) {
+  _csr_sv_device<float>(idA, idX, idY, alpha, op, buffer);
 }
