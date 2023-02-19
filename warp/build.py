@@ -397,7 +397,7 @@ def build_dll(cpp_path, cu_path, dll_path, mode="release", verify_fp=False, fast
                 cu_out = cu_path + ".o"
                 ld_inputs.append(cu_out)
 
-            ld_flags = f'-L"{cuda_home}/lib64" -lcudart_static -lcusparse_static -lnvrtc_static -lnvrtc-builtins_static -lnvptxcompiler_static -lcublas_static -lcublasLt_static -lpthread -ldl -lrt'
+            ld_flags = f'-L"{cuda_home}/lib64" -lcudart_static -lcusparse_static -lnvrtc_static -lnvrtc-builtins_static -lnvptxcompiler_static -lpthread -ldl -lrt'
 
 
         if sys.platform == 'darwin':
