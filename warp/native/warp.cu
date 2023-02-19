@@ -1050,16 +1050,19 @@ size_t cuda_launch_kernel(void* context, void* kernel, size_t dim, void** args)
 
 
 // impl. files
-#include "bvh.cu"
-#include "mesh.cu"
-#include "sort.cu"
-#include "hashgrid.cu"
-#include "scan.cu"
-#include "marching.cu"
-#include "volume.cu"
-#include "volume_builder.cu"
-#include "cutlass_gemm.cu"
-#include "sparse.cu"
+
+
+// #include "bvh.cu"
+// #include "mesh.cu"
+// #include "sort.cu"
+// #include "hashgrid.cu"
+// #include "scan.cu"
+// #include "marching.cu"
+// #include "volume.cu"
+// #include "volume_builder.cu"
+// #include "cutlass_gemm.cu"
+// #include "sparse.cu"
+
 
 //#include "spline.inl"
 //#include "volume.inl"

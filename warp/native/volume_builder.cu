@@ -1,3 +1,5 @@
+#include "builtin.h"
+#include "cuda_util.h"
 #include "volume_builder.h"
 
 #include <cuda.h>

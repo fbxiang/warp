@@ -1,5 +1,6 @@
 #include "warp.h"
 #include "scan.h"
+#include "cuda_util.h"
 
 #define THRUST_IGNORE_CUB_VERSION_CHECK
 
