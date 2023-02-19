@@ -162,7 +162,6 @@ extern "C"
     WP_API void cuda_set_context_restore_policy(bool always_restore);
     WP_API int cuda_get_context_restore_policy();
 
-    // WP_API void csr_solve_lt_device(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
     WP_API int csr_sv_device_buffer_size(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, int op);
     WP_API void csr_sv_device(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, int op, void *buffer);
 
@@ -182,4 +181,6 @@ extern "C"
 
     WP_API void csr_solve_host(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
     WP_API void csc_solve_host(int n, int nnz, int *offsets, int *rows, float *values, float *X, float *Y);
+    WP_API void csr_pd_solve_host(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
+    WP_API void csc_pd_solve_host(int n, int nnz, int *offsets, int *rows, float *values, float *X, float *Y);
 } // extern "C"

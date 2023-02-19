@@ -1574,6 +1574,11 @@ class Runtime:
         self.core.csr_solve_host.restype = None
         self.core.csc_solve_host.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
         self.core.csc_solve_host.restype = None
+        self.core.csr_pd_solve_host.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        self.core.csr_pd_solve_host.restype = None
+        self.core.csc_pd_solve_host.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        self.core.csc_pd_solve_host.restype = None
+
 
         self.core.bvh_create_host.restype = ctypes.c_uint64
         self.core.bvh_create_host.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]

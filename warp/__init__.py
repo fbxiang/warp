@@ -42,7 +42,7 @@ from warp.tape import Tape
 from warp.utils import ScopedTimer, ScopedCudaGuard, ScopedDevice, ScopedStream
 from warp.utils import transform_expand
 
-from warp.utils import csr_solve_lt_device, csr_solve_host, csc_solve_host, csr_ilu_device_buffer_size, csr_mv_device, csr_mv_device_buffer_size, csr_ilu_device, csr_ichol_device_buffer_size, csr_ichol_device, csr_print
+from warp.utils import csr_solve_lt_device, csr_solve_host, csc_solve_host, csr_pd_solve_host, csc_pd_solve_host, csr_ilu_device_buffer_size, csr_mv_device, csr_mv_device_buffer_size, csr_ilu_device, csr_ichol_device_buffer_size, csr_ichol_device, csr_print
 
 from warp.torch import from_torch, to_torch
 from warp.torch import device_from_torch, device_to_torch
