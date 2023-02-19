@@ -729,40 +729,42 @@ def csr_mv_device(offsets: wp.array, cols: wp.array, A: wp.array, x: wp.array, y
     return wp.context.runtime.core.csr_mv_device(n, nnz, offsets.ptr, cols.ptr, A.ptr, x.ptr, y.ptr, alpha, beta, buffer.ptr)
 
 
-def csr_solve_host(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None):
+def csr_solve_host(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None, backend="LU"):
     if n is None:
         n = b.shape[0]
     if nnz is None:
         nnz = A.shape[0]
 
-    wp.context.runtime.core.csr_solve_host(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
+    if backend == "LU":
+        wp.context.runtime.core.csr_solve_host(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
+
+    elif backend == "LDLT":
+        wp.context.runtime.core.csr_pd_solve_host(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
+
+    elif backend == "MKL_LDLT":
+        wp.context.runtime.core.csr_pardiso_pd_solve_host(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
+
+    else:
+        raise Exception("backend must be one of LU, LDLT, MKL_LDLT")
 
 
-def csc_solve_host(offsets: wp.array, rows: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None):
+def csc_solve_host(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None, backend="LU"):
     if n is None:
         n = b.shape[0]
     if nnz is None:
         nnz = A.shape[0]
 
-    wp.context.runtime.core.csc_solve_host(n, nnz, offsets.ptr, rows.ptr, A.ptr, b.ptr, x.ptr)
+    if backend == "LU":
+        wp.context.runtime.core.csc_solve_host(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
 
+    elif backend == "LDLT":
+        wp.context.runtime.core.csc_pd_solve_host(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
 
-def csr_pd_solve_host(offsets: wp.array, cols: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None):
-    if n is None:
-        n = b.shape[0]
-    if nnz is None:
-        nnz = A.shape[0]
+    elif backend == "MKL_LDLT":
+        wp.context.runtime.core.csc_pardiso_pd_solve_host(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
 
-    wp.context.runtime.core.csr_pd_solve_host(n, nnz, offsets.ptr, cols.ptr, A.ptr, b.ptr, x.ptr)
-
-
-def csc_pd_solve_host(offsets: wp.array, rows: wp.array, A: wp.array, b: wp.array, x: wp.array, n=None, nnz=None):
-    if n is None:
-        n = b.shape[0]
-    if nnz is None:
-        nnz = A.shape[0]
-
-    wp.context.runtime.core.csc_pd_solve_host(n, nnz, offsets.ptr, rows.ptr, A.ptr, b.ptr, x.ptr)
+    else:
+        raise Exception("backend must be one of LU, LDLT, MKL_LDLT")
 
 
 def csr_print(offsets: wp.array, cols: wp.array, A, n=None, nnz=None):

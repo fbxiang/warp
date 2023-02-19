@@ -58,7 +58,12 @@ def test_csr_pd_solve_host(test, device):
 
     X = wp.array([28.0, 8.0, 48.0, 60.0], dtype=float, device=device)
     Y = wp.array([0.0, 0.0, 0.0, 0.0], dtype=float, device=device)
-    wp.csr_pd_solve_host(offsets, cols, A, X, Y)
+    wp.csr_solve_host(offsets, cols, A, X, Y, backend="LDLT")
+    assert_np_equal(Y.numpy(), np.array([1.0, 2.0, 3.0, 4.0]), tol=1e-4)
+
+    X = wp.array([28.0, 8.0, 48.0, 60.0], dtype=float, device=device)
+    Y = wp.array([0.0, 0.0, 0.0, 0.0], dtype=float, device=device)
+    wp.csr_solve_host(offsets, cols, A, X, Y, backend="MKL_LDLT")
     assert_np_equal(Y.numpy(), np.array([1.0, 2.0, 3.0, 4.0]), tol=1e-4)
 
     # Only LT is needed
@@ -75,7 +80,12 @@ def test_csr_pd_solve_host(test, device):
 
     X = wp.array([28.0, 8.0, 48.0, 60.0], dtype=float, device=device)
     Y = wp.array([0.0, 0.0, 0.0, 0.0], dtype=float, device=device)
-    wp.csr_pd_solve_host(offsets, cols, A, X, Y)
+    wp.csr_solve_host(offsets, cols, A, X, Y, backend="LDLT")
+    assert_np_equal(Y.numpy(), np.array([1.0, 2.0, 3.0, 4.0]), tol=1e-4)
+
+    X = wp.array([28.0, 8.0, 48.0, 60.0], dtype=float, device=device)
+    Y = wp.array([0.0, 0.0, 0.0, 0.0], dtype=float, device=device)
+    wp.csr_solve_host(offsets, cols, A, X, Y, backend="MKL_LDLT")
     assert_np_equal(Y.numpy(), np.array([1.0, 2.0, 3.0, 4.0]), tol=1e-4)
 
 

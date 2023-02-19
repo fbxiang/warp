@@ -183,4 +183,6 @@ extern "C"
     WP_API void csc_solve_host(int n, int nnz, int *offsets, int *rows, float *values, float *X, float *Y);
     WP_API void csr_pd_solve_host(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
     WP_API void csc_pd_solve_host(int n, int nnz, int *offsets, int *rows, float *values, float *X, float *Y);
+    WP_API void csr_pardiso_pd_solve_host(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
+    WP_API void csc_pardiso_pd_solve_host(int n, int nnz, int *offsets, int *rows, float *values, float *X, float *Y);
 } // extern "C"
