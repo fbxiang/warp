@@ -353,39 +353,81 @@ def build_dll(cpp_path, cu_path, dll_path, mode="release", verify_fp=False, fast
             run_cmd(link_cmd)
         
     else:
+        # TODO: hack, build as usual
+        if (not cu_path):
+            cpp_out = cpp_path + ".o"
 
-        cpp_out = cpp_path + ".o"
-        from pathlib import Path
-        cpp_dir = Path(cu_path).parent
-        header_files = [str(h) for h in cpp_dir.glob("*.h")]
+            if cuda_enabled:
+                cuda_includes = f' -I"{cuda_home}/include"'
+            else:
+                cuda_includes = ""
 
-        if cuda_enabled:
-            cuda_includes = f' -I"{cuda_home}/include"'
+            if (mode == "debug"):
+                cpp_flags = f'-O0 -g -D_DEBUG -DWP_CPU -DWP_ENABLE_CUDA={cuda_enabled} -fPIC -fvisibility=hidden --std=c++11 -fkeep-inline-functions -I"{native_dir}" {cuda_includes}'
+                ld_flags = "-D_DEBUG"
+                ld_inputs = []
+
+            if (mode == "release"):
+                cpp_flags = f'-O3 -DNDEBUG -DWP_CPU -DWP_ENABLE_CUDA={cuda_enabled} -fPIC -fvisibility=hidden --std=c++11 -I"{native_dir}" {cuda_includes}'
+                ld_flags = "-DNDEBUG"
+                ld_inputs = []
+
+            if verify_fp:
+                cpp_flags += ' -DWP_VERIFY_FP'
+
+            if fast_math:
+                cpp_flags += ' -ffast-math'
+
+            with ScopedTimer("build", active=warp.config.verbose):
+                build_cmd = f'g++ {cpp_flags} -c "{cpp_path}" -o "{cpp_out}"'
+                run_cmd(build_cmd)
+
+                ld_inputs.append(quote(cpp_out))
+
+            if sys.platform == 'darwin':
+                opt_no_undefined = "-Wl,-undefined,error"
+                opt_exclude_libs = ""
+            else:
+                opt_no_undefined = "-Wl,--no-undefined"
+                opt_exclude_libs = "-Wl,--exclude-libs,ALL"
+
+            link_cmd = f"g++ -shared -Wl,-rpath,'$ORIGIN' {opt_no_undefined} {opt_exclude_libs} -o '{dll_path}' {' '.join(ld_inputs)}"
+            run_cmd(link_cmd)
+
         else:
-            cuda_includes = ""
+            # HACK: we are building warp.so, use Makefile
+            assert dll_path.endswith("warp.so")
 
-        if (mode == "debug"):
-            cpp_flags = f'-O0 -g -D_DEBUG -DWP_CPU -DWP_ENABLE_CUDA={cuda_enabled} -fPIC -fvisibility=hidden --std=c++11 -fkeep-inline-functions -I"{native_dir}" {cuda_includes}'
-            ld_flags = "-D_DEBUG"
-            ld_inputs = []
+            cpp_out = cpp_path + ".o"
+            from pathlib import Path
+            cpp_dir = Path(cu_path).parent
+            header_files = [str(h) for h in cpp_dir.glob("*.h")]
 
-        if (mode == "release"):
-            cpp_flags = f'-O3 -DNDEBUG -DWP_CPU -DWP_ENABLE_CUDA={cuda_enabled} -fPIC -fvisibility=hidden --std=c++11 -I"{native_dir}" {cuda_includes}'
-            ld_flags = "-DNDEBUG"
-            ld_inputs = []
+            if cuda_enabled:
+                cuda_includes = f' -I"{cuda_home}/include"'
+            else:
+                cuda_includes = ""
 
-        if verify_fp:
-            cpp_flags += ' -DWP_VERIFY_FP'
+            if (mode == "debug"):
+                cpp_flags = f'-O0 -g -D_DEBUG -DWP_CPU -DWP_ENABLE_CUDA={cuda_enabled} -fPIC -fvisibility=hidden --std=c++11 -fkeep-inline-functions -I"{native_dir}" {cuda_includes}'
+                ld_flags = "-D_DEBUG"
+                ld_inputs = []
 
-        if fast_math:
-            cpp_flags += ' -ffast-math'
+            if (mode == "release"):
+                cpp_flags = f'-O3 -DNDEBUG -DWP_CPU -DWP_ENABLE_CUDA={cuda_enabled} -fPIC -fvisibility=hidden --std=c++11 -I"{native_dir}" {cuda_includes}'
+                ld_flags = "-DNDEBUG"
+                ld_inputs = []
 
-            build_cmd = f'g++ {cpp_flags} -c "{cpp_path}" -o "{cpp_out}"'
+            if verify_fp:
+                cpp_flags += ' -DWP_VERIFY_FP'
 
-        ld_inputs.append(cpp_out)
+            if fast_math:
+                cpp_flags += ' -ffast-math'
 
-        ld_flags = ""
-        if cu_path:
+                build_cmd = f'g++ {cpp_flags} -c "{cpp_path}" -o "{cpp_out}"'
+
+            ld_inputs.append(cpp_out)
+
             if (mode == "debug"):
                 cuda_cmd = f'"{cuda_home}/bin/nvcc" -g -G -O0 --compiler-options -fPIC,-fvisibility=hidden -D_DEBUG -D_ITERATOR_DEBUG_LEVEL=0 -line-info {" ".join(nvcc_opts)} -DWP_CUDA {cutlass_includes} -DWP_ENABLE_CUDA=1 -I"{native_dir}"'
             elif (mode == "release"):
@@ -400,18 +442,17 @@ def build_dll(cpp_path, cu_path, dll_path, mode="release", verify_fp=False, fast
             ld_flags = f'-L"{cuda_home}/lib64" -lcudart_static -lcusparse_static -lnvrtc_static -lnvrtc-builtins_static -lnvptxcompiler_static -lpthread -ldl -lrt'
 
 
-        if sys.platform == 'darwin':
-            opt_no_undefined = "-Wl,-undefined,error"
-            opt_exclude_libs = ""
-        else:
-            opt_no_undefined = "-Wl,--no-undefined"
-            opt_exclude_libs = "-Wl,--exclude-libs,ALL"
+            if sys.platform == 'darwin':
+                opt_no_undefined = "-Wl,-undefined,error"
+                opt_exclude_libs = ""
+            else:
+                opt_no_undefined = "-Wl,--no-undefined"
+                opt_exclude_libs = "-Wl,--exclude-libs,ALL"
 
-        link_cmd = f"g++ -shared -Wl,-rpath,'$$ORIGIN' {opt_no_undefined} {opt_exclude_libs}"
+            link_cmd = f"g++ -shared -Wl,-rpath,'$$ORIGIN' {opt_no_undefined} {opt_exclude_libs}"
 
 
-# build a Makefile
-        makefile = f"""
+            makefile = f"""
 all: {dll_path}
 .PHONY: all
 
@@ -426,11 +467,11 @@ all: {dll_path}
 
 %: %.o
         """
-        with open("Makefile", "w") as f:
-            f.write(makefile)
+            with open("Makefile", "w") as f:
+                f.write(makefile)
 
-        with ScopedTimer("build", active=warp.config.verbose):
-            run_cmd("make")
+            with ScopedTimer("build", active=warp.config.verbose):
+                run_cmd("make")
 
     
 def load_dll(dll_path):    

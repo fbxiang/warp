@@ -177,8 +177,8 @@ extern "C"
     WP_API int csr_ilu_device_buffer_size(uint64_t id);
     WP_API void csr_ilu_device(uint64_t id, float *LU_values, void *buffer);
 
-    int csr_mv_device_buffer_size(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, float beta);
-    void csr_mv_device(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, float beta, void *buffer);
+    WP_API int csr_mv_device_buffer_size(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, float beta);
+    WP_API void csr_mv_device(uint64_t idA, uint64_t idX, uint64_t idY, float alpha, float beta, void *buffer);
 
     WP_API void csr_solve_host(int n, int nnz, int *offsets, int *columns, float *values, float *X, float *Y);
     WP_API void csc_solve_host(int n, int nnz, int *offsets, int *rows, float *values, float *X, float *Y);
